@@ -4,11 +4,14 @@ namespace Cesargb\Log\Processors;
 
 abstract class AbstractProcessor
 {
-    private string $fileOut;
+	/** @var string  */
+    private $fileOut;
 
-    protected string $fileOriginal;
+    /** @var string  */
+    protected $fileOriginal;
 
-    protected string $suffix = '';
+    /** @var string  */
+    protected $suffix = '';
 
     abstract public function handler($file): ?string;
 

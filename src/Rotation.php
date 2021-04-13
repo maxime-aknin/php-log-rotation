@@ -8,11 +8,14 @@ use Exception;
 
 class Rotation
 {
-    private RotativeProcessor $processor;
+	/** @var \Cesargb\Log\Processors\RotativeProcessor  */
+    private $processor;
 
-    private bool $_compress = false;
+    /** @var bool  */
+    private $_compress = false;
 
-    private int $_minSize = 0;
+    /** @var int  */
+    private $_minSize = 0;
 
     private $thenCallback = null;
 
