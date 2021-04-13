@@ -4,62 +4,87 @@ namespace Cesargb\Log\Processors;
 
 class RotativeProcessor extends AbstractProcessor
 {
-    private $maxFiles = 366;
+	private $maxFiles = 366;
+	private $destDir = null;
 
-    /**
-     * Log files are rotated count times before being removed
-     *
-     * @param int $count
-     * @return self
-     */
-    public function files(int $count): self
-    {
-        $this->maxFiles = $count;
+	/**
+	 * Log files are rotated count times before being removed
+	 *
+	 * @param int $count
+	 * @return self
+	 */
+	public function files(int $count): self
+	{
+		$this->maxFiles = $count;
 
-        return $this;
-    }
+		return $this;
+	}
 
-    public function handler($file): ?string
-    {
-        $nextFile = "{$this->fileOriginal}.1";
+	public function handler($file): ?string
+	{
+		$nextFile = "{$this->getDestFile()}.1";
 
-        $this->rotate();
+		$this->rotate();
 
-        rename($file, $nextFile);
+		rename($file, $nextFile);
 
-        return $this->processed($nextFile);
-    }
+		return $this->processed($nextFile);
+	}
 
-    private function rotate(int $number = 1): string
-    {
-        $file = "{$this->fileOriginal}.{$number}{$this->suffix}";
+	/**
+	 * @return string
+	 */
+	public function getDestFile(): string
+	{
+		if (null !== $this->getDestDir()) {
+			return dirname($this->fileOriginal).'/'.$this->getDestDir().'/'.basename($this->fileOriginal);
+		} else {
+			return $this->fileOriginal;
+		}
+	}
 
-        if (!file_exists($file)) {
-            return "{$this->fileOriginal}.{$number}{$this->suffix}";
-        }
+	private function rotate(int $number = 1): string
+	{
+		$destFile = $this->getDestFile();
+		$file = "{$destFile}.{$number}{$this->suffix}";
 
-        if ($this->maxFiles > 0 && $number >= $this->maxFiles ) {
-            if (file_exists($file)) {
-                unlink($file);
-            }
+		if (!file_exists($file)) {
+			return "{$destFile}.{$number}{$this->suffix}";
+		}
 
-            return "{$this->fileOriginal}.{$number}{$this->suffix}";
-        }
+		if ($this->maxFiles > 0 && $number >= $this->maxFiles ) {
+			if (file_exists($file)) {
+				unlink($file);
+			}
 
-        $nextFile = $this->rotate($number + 1);
+			return "{$destFile}.{$number}{$this->suffix}";
+		}
 
-        rename($file, $nextFile);
+		$nextFile = $this->rotate($number + 1);
 
-        return "{$this->fileOriginal}.{$number}{$this->suffix}";
-    }
+		rename($file, $nextFile);
 
-    private function getnumber(string $file): ?int
-    {
-        $fileName = basename($file);
-        $fileOriginaleName = basename($this->fileOriginal);
+		return "{$destFile}.{$number}{$this->suffix}";
+	}
 
-        preg_match("/{$fileOriginaleName}.([0-9]+){$this->suffix}/", $fileName, $output);
+	public function getDestDir()
+	{
+		return $this->destDir;
+	}
 
-        return $output[1] ?? null;
-    }
+	public function setDestDir($destDir)
+	{
+		$this->destDir = $destDir;
+		return $this;
+	}
+
+	private function getnumber(string $file): ?int
+	{
+		$fileName = basename($file);
+		$fileOriginaleName = basename($this->fileOriginal);
+
+		preg_match("/{$fileOriginaleName}.([0-9]+){$this->suffix}/", $fileName, $output);
+
+		return $output[1] ?? null;
+	}
 }

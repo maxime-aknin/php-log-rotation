@@ -9,252 +9,266 @@ use Exception;
 class Rotation
 {
 	/** @var \Cesargb\Log\Processors\RotativeProcessor  */
-    private $processor;
+	private $processor;
 
-    /** @var bool  */
-    private $_compress = false;
+	/** @var bool  */
+	private $_compress = false;
 
-    /** @var int  */
-    private $_minSize = 0;
+	/** @var int  */
+	private $_minSize = 0;
 
-    private $thenCallback = null;
+	private $thenCallback = null;
 
-    private $errorHandler = null;
+	private $errorHandler = null;
 
-    public function __construct()
-    {
-        $this->processor = new RotativeProcessor();
+	private $dest_dir = null;
 
-        $this->errorHandler = new ErrorHandler();
-    }
+	public function __construct()
+	{
+		$this->processor = new RotativeProcessor();
 
-    /**
-     * Log files are rotated count times before being removed
-     *
-     * @param int $count
-     * @return self
-     */
-    public function files(int $count): self
-    {
-        $this->processor->files($count);
+		$this->errorHandler = new ErrorHandler();
+	}
 
-        return $this;
-    }
+	/**
+	 * Log files are rotated count times before being removed
+	 *
+	 * @param int $count
+	 * @return self
+	 */
+	public function files(int $count): self
+	{
+		$this->processor->files($count);
 
-    /**
-     * Old versions of log files are compressed
-     *
-     * @return self
-     */
-    public function compress(): self
-    {
-        $this->_compress = true;
+		return $this;
+	}
 
-        $this->processor->compress();
+	/**
+	 * Old versions of log files are compressed
+	 *
+	 * @return self
+	 */
+	public function compress(): self
+	{
+		$this->_compress = true;
 
-        return $this;
-    }
+		$this->processor->compress();
 
-    /**
-     * Log files are rotated when they grow bigger than size bytes
-     *
-     * @param integer $bytes
-     * @return self
-     */
-    public function minSize(int $bytes): self
-    {
-        $this->_minSize = $bytes;
+		return $this;
+	}
 
-        return $this;
-    }
+	/**
+	 * Log files are rotated when they grow bigger than size bytes
+	 *
+	 * @param integer $bytes
+	 * @return self
+	 */
+	public function minSize(int $bytes): self
+	{
+		$this->_minSize = $bytes;
 
-    /**
-     * Call function if roteted was sucessfull and pass
-     * the file as argument.
-     *
-     * @param callable $callable
-     * @return self
-     */
-    public function then(callable $callable): self
-    {
-        $this->thenCallback = $callable;
+		return $this;
+	}
 
-        return $this;
-    }
+	/**
+	 * Call function if roteted was sucessfull and pass
+	 * the file as argument.
+	 *
+	 * @param callable $callable
+	 * @return self
+	 */
+	public function then(callable $callable): self
+	{
+		$this->thenCallback = $callable;
 
-    /**
-     * Call function if roteted catch any Exception.
-     *
-     * @param callable $callable
-     * @return self
-     */
-    public function catch(callable $callable): self
-    {
-        $this->errorHandler->catch($callable);
+		return $this;
+	}
 
-        return $this;
-    }
+	/**
+	 * Call function if roteted catch any Exception.
+	 *
+	 * @param callable $callable
+	 * @return self
+	 */
+	public function catch(callable $callable): self
+	{
+		$this->errorHandler->catch($callable);
 
-    /**
-     * Rotate file
-     *
-     * @param string $file
-     * @return boolean true if rotated was successful
-     */
-    public function rotate(string $file): bool
-    {
-        if (!$this->canRotate($file)) {
-            return false;
-        }
+		return $this;
+	}
 
-        $fileRotate = $this->moveContentToTempFile($file);
+	/**
+	 * Rotate file
+	 *
+	 * @param string $file
+	 * @return boolean true if rotated was successful
+	 */
+	public function rotate(string $file): bool
+	{
+		if (!$this->canRotate($file)) {
+			return false;
+		}
 
-        $fileRotated = $this->runProcessor($file, $fileRotate);
+		$fileRotate = $this->moveContentToTempFile($file);
 
-        if ($fileRotated && $this->_compress) {
-            $gz = new Gz();
+		$fileRotated = $this->runProcessor($file, $fileRotate);
 
-            try {
-                $fileRotated = $gz->handler($fileRotated);
-            } catch (Exception $error) {
-                $this->errorHandler->exception($error);
+		if ($fileRotated && $this->_compress) {
+			$gz = new Gz();
 
-                $fileRotated = null;
-            }
+			try {
+				$fileRotated = $gz->handler($fileRotated);
+			} catch (Exception $error) {
+				$this->errorHandler->exception($error);
 
-        }
+				$fileRotated = null;
+			}
 
-        if ($fileRotated && $this->thenCallback) {
-            call_user_func($this->thenCallback, $fileRotated);
-        }
+		}
 
-        return ! empty($fileRotated);
-    }
+		if ($fileRotated && $this->thenCallback) {
+			call_user_func($this->thenCallback, $fileRotated);
+		}
 
-    /**
-     * Run processor
-     *
-     * @param string $originalFile
-     * @param string|null $fileRotated
-     * @return string|null
-     */
-    private function runProcessor(string $originalFile, ?string $fileRotated): ?string
-    {
-        $this->initProcessorFile($originalFile);
+		return ! empty($fileRotated);
+	}
 
-        if (!$fileRotated) {
-            return null;
-        }
+	/**
+	 * Run processor
+	 *
+	 * @param string $originalFile
+	 * @param string|null $fileRotated
+	 * @return string|null
+	 */
+	private function runProcessor(string $originalFile, ?string $fileRotated): ?string
+	{
+		$this->initProcessorFile($originalFile);
+		$this->processor->setDestDir($this->getDestDir());
 
-        $fileRotated = $this->processor->handler($fileRotated);
+		if (!$fileRotated) {
+			return null;
+		}
 
-        return $fileRotated;
-    }
+		$fileRotated = $this->processor->handler($fileRotated);
 
-    /**
-     * check if file need rotate
-     *
-     * @param string $file
-     * @return boolean
-     */
-    private function canRotate(string $file): bool
-    {
-        if (! $this->fileIsValid($file)) {
-            $this->errorHandler->exception(
-                new Exception(sprintf('the file %s not is valid.', $file), 10)
-            );
+		return $fileRotated;
+	}
 
-            return false;
-        }
+	/**
+	 * check if file need rotate
+	 *
+	 * @param string $file
+	 * @return boolean
+	 */
+	private function canRotate(string $file): bool
+	{
+		if (! $this->fileIsValid($file)) {
+			$this->errorHandler->exception(
+				new Exception(sprintf('the file %s not is valid.', $file), 10)
+			);
 
-        return filesize($file) > ($this->_minSize > 0 ? $this->_minSize : 0);
-    }
+			return false;
+		}
 
-    /**
-     * Set original File to processor
-     *
-     * @param string $file
-     * @return void
-     */
-    private function initProcessorFile(string $file): void
-    {
-        $this->processor->setFileOriginal($file);
-    }
+		return filesize($file) > ($this->_minSize > 0 ? $this->_minSize : 0);
+	}
 
-    /**
-     * check if file is valid to rotate
-     *
-     * @param string|null $file
-     * @return boolean
-     */
-    private function fileIsValid(?string $file): bool
-    {
-        return $file && is_file($file) && is_writable($file);
-    }
+	/**
+	 * Set original File to processor
+	 *
+	 * @param string $file
+	 * @return void
+	 */
+	private function initProcessorFile(string $file): void
+	{
+		$this->processor->setFileOriginal($file);
+	}
 
-    /**
-     * move data to temp file and truncate
-     *
-     * @param string $file
-     * @return string|null
-     */
-    private function moveContentToTempFile(string $file): ?string
-    {
-        clearstatcache();
+	/**
+	 * check if file is valid to rotate
+	 *
+	 * @param string|null $file
+	 * @return boolean
+	 */
+	private function fileIsValid(?string $file): bool
+	{
+		return $file && is_file($file) && is_writable($file);
+	}
 
-        $fileDestination = tempnam(dirname($file), 'LOG');
+	/**
+	 * move data to temp file and truncate
+	 *
+	 * @param string $file
+	 * @return string|null
+	 */
+	private function moveContentToTempFile(string $file): ?string
+	{
+		clearstatcache();
 
-        $fd = fopen($file, 'r+');
+		$fileDestination = tempnam(dirname($file), 'LOG');
 
-        if (! $fd) {
-            $this->errorHandler->exception(
-                new Exception(sprintf('the file %s not can open.', $file), 20)
-            );
+		$fd = fopen($file, 'r+');
 
-            return null;
-        }
+		if (! $fd) {
+			$this->errorHandler->exception(
+				new Exception(sprintf('the file %s not can open.', $file), 20)
+			);
 
-        if (! flock($fd, LOCK_EX)) {
-            fclose($fd);
+			return null;
+		}
 
-            $this->errorHandler->exception(
-                new Exception(sprintf('the file %s not can lock.', $file), 21)
-            );
+		if (! flock($fd, LOCK_EX)) {
+			fclose($fd);
 
-            return null;
-        }
+			$this->errorHandler->exception(
+				new Exception(sprintf('the file %s not can lock.', $file), 21)
+			);
 
-        if (! copy($file, $fileDestination)) {
-            fclose($fd);
+			return null;
+		}
 
-            $this->errorHandler->exception(
-                new Exception(
-                    sprintf('the file %s not can copy to temp file %s.', $file, $fileDestination),
-                    22
-                )
-            );
+		if (! copy($file, $fileDestination)) {
+			fclose($fd);
 
-            return null;
-        }
+			$this->errorHandler->exception(
+				new Exception(
+					sprintf('the file %s not can copy to temp file %s.', $file, $fileDestination),
+					22
+				)
+			);
 
-        if (! ftruncate($fd, 0)) {
-            fclose($fd);
+			return null;
+		}
 
-            unlink($fileDestination);
+		if (! ftruncate($fd, 0)) {
+			fclose($fd);
 
-            $this->errorHandler->exception(
-                new Exception(sprintf('the file %s not can truncate.', $file), 23)
-            );
+			unlink($fileDestination);
 
-            return null;
-        }
+			$this->errorHandler->exception(
+				new Exception(sprintf('the file %s not can truncate.', $file), 23)
+			);
 
-        flock($fd, LOCK_UN);
+			return null;
+		}
 
-        fflush($fd);
+		flock($fd, LOCK_UN);
 
-        fclose($fd);
+		fflush($fd);
 
-        return $fileDestination;
-    }
+		fclose($fd);
+
+		return $fileDestination;
+	}
+
+	public function getDestDir()
+	{
+		return $this->dest_dir;
+	}
+
+	public function setDestDir($dest_dir)
+	{
+		$this->dest_dir = $dest_dir;
+		return $this;
+	}
 }
